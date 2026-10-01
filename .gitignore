@@ -1,0 +1,17 @@
+node_modules/
+frontend/dist/
+.venv/
+.runtime/
+.env
+__pycache__/
+.pytest_cache/
+*.pyc
+artifacts/
+output/
+.playwright-cli/
+docs/agy-frontend-brief.md
+*.log
+*.mp4
+*.part
+Volume/
+settings.local.json
