@@ -12,6 +12,7 @@ import httpx
 from .engine import Engine, EngineError
 from .links import extract_links, identify
 from .store import JobStore
+from .browser_cookie import BrowserCookie
 
 
 def now():
@@ -44,6 +45,19 @@ class DesktopService:
         self.closed = False
         self.worker = None
         self.boot_thread = None
+        self.browser_cookie = BrowserCookie(runtime, self.save_browser_cookie)
+
+    def save_browser_cookie(self, cookie):
+        with self.control_lock:
+            if self.closed:
+                raise EngineError('应用正在关闭，请重新获取 Cookie')
+            self.update_settings({'cookie': cookie}, from_browser=True)
+
+    def start_browser_cookie(self, browser, mode):
+        with self.control_lock:
+            if self.busy() or self.engine.installing or self.engine.status == 'starting':
+                raise EngineError('请等待下载队列和引擎更新结束后再读取 Cookie')
+            return self.browser_cookie.start(browser, mode)
 
     def start(self):
         self.worker = threading.Thread(target=self.work, daemon=True, name="download-queue")
@@ -70,8 +84,10 @@ class DesktopService:
     def busy(self):
         return bool(self.active_ids) or any(job["status"] in {"queued", "parsing", "downloading"} for job in self.store.list())
 
-    def update_settings(self, values: dict):
+    def update_settings(self, values: dict, *, from_browser=False):
         with self.control_lock:
+            if self.browser_cookie.active() and not from_browser:
+                raise EngineError('请先完成或取消 Cookie 获取，再修改设置')
             if self.busy() or self.engine.installing or self.engine.status == "starting":
                 raise EngineError("请等待下载队列和引擎更新结束后再修改设置")
             directory = values.get("download_dir")
@@ -128,6 +144,8 @@ class DesktopService:
 
     def add_jobs(self, urls: list[str]):
         with self.control_lock:
+            if self.browser_cookie.active():
+                raise EngineError('请先完成或取消 Cookie 获取，再开始下载')
             if self.engine.installing:
                 raise EngineError("引擎正在更新，完成后即可添加下载")
             if self.engine.status != "ready":
@@ -167,6 +185,8 @@ class DesktopService:
 
     def retry(self, job_id):
         with self.control_lock:
+            if self.browser_cookie.active():
+                raise EngineError('请先完成或取消 Cookie 获取，再重试下载')
             job = self.store.get(job_id)
             if job is None:
                 raise KeyError(job_id)
@@ -301,6 +321,8 @@ class DesktopService:
 
     def begin_update(self):
         with self.control_lock:
+            if self.browser_cookie.active():
+                raise EngineError('请先完成或取消 Cookie 获取，再更新引擎')
             if self.busy():
                 raise EngineError("请先完成或取消下载队列，再更新引擎")
             if self.engine.installing or self.engine.status == "starting":
@@ -316,6 +338,7 @@ class DesktopService:
 
     def close(self):
         self.closed = True
+        self.browser_cookie.close()
         for event in self.cancel_events.values():
             event.set()
         if self.worker:

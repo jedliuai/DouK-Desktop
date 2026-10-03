@@ -10,6 +10,7 @@ import {
   EngineUpdateStartResponse,
   OpenFolderResponse,
   OpenFileResponse,
+  BrowserCookieStatus,
 } from '../types/api';
 
 export class ApiError extends Error {
@@ -78,6 +79,18 @@ export const api = {
   },
 
   // Media preview
+  async startBrowserCookie(browser: string, mode: 'existing' | 'login'): Promise<BrowserCookieStatus> {
+    return request('/api/cookie/browser', { method: 'POST', body: JSON.stringify({ browser, mode }) });
+  },
+
+  async getBrowserCookieStatus(): Promise<BrowserCookieStatus> {
+    return request('/api/cookie/browser');
+  },
+
+  async cancelBrowserCookie(): Promise<BrowserCookieStatus> {
+    return request('/api/cookie/browser/cancel', { method: 'POST' });
+  },
+
   async preview(text: string): Promise<PreviewResponse> {
     return request<PreviewResponse>('/api/preview', {
       method: 'POST',

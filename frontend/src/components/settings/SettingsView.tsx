@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { EnginePanel } from './EnginePanel';
+import { api, ApiError } from '../../services/api';
+import { BrowserCookieStatus } from '../../types/api';
 import {
   Folder,
   FolderOpen,
@@ -22,6 +24,55 @@ export const SettingsView: React.FC = () => {
   const [cookieInput, setCookieInput] = useState<string>('');
   const [showCookie, setShowCookie] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [browserChoice, setBrowserChoice] = useState('edge');
+  const [capture, setCapture] = useState<BrowserCookieStatus>({ state: 'idle', message: '' });
+  const [captureLoading, setCaptureLoading] = useState(false);
+  const captureActive = ['starting', 'waiting', 'saving'].includes(capture.state);
+
+  useEffect(() => {
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const status = await api.getBrowserCookieStatus();
+        if (disposed) return;
+        setCapture(status);
+        if (status.state === 'success') await refreshSettings();
+        if (['starting', 'waiting', 'saving'].includes(status.state)) {
+          timer = setTimeout(poll, 1200);
+        }
+      } catch (err) {
+        if (!disposed) {
+          setCapture({ state: 'error', message: err instanceof ApiError ? err.detail : '读取状态失败，请刷新页面' });
+        }
+      }
+    };
+    void poll();
+    return () => { disposed = true; clearTimeout(timer); };
+  }, [captureActive, refreshSettings]);
+
+  const handleCapture = async (mode: 'existing' | 'login') => {
+    setCaptureLoading(true);
+    try {
+      const status = await api.startBrowserCookie(browserChoice, mode);
+      setCapture(status);
+      if (status.state === 'success') await refreshSettings();
+    } catch (err) {
+      const message = err instanceof ApiError ? err.detail : '无法开始读取 Cookie';
+      setCapture({ state: 'error', message });
+      addToast(message, 'error');
+    } finally {
+      setCaptureLoading(false);
+    }
+  };
+
+  const handleCancelCapture = async () => {
+    try {
+      setCapture(await api.cancelBrowserCookie());
+    } catch (err) {
+      addToast(err instanceof ApiError ? err.detail : '取消失败，请重试', 'error');
+    }
+  };
 
   useEffect(() => {
     if (settings) {
@@ -183,7 +234,32 @@ export const SettingsView: React.FC = () => {
             </div>
 
             <div className="settings-desc">
-              Cookie 失效时可在此更新，不修改请留空。
+              选择已登录抖音的浏览器，一键读取并保存。读取失败时，可打开登录窗口自动获取。
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '12px' }}>
+              <select
+                aria-label="读取 Cookie 的浏览器"
+                value={browserChoice}
+                onChange={(e) => setBrowserChoice(e.target.value)}
+                disabled={captureActive || captureLoading || isSubmitting}
+                style={{ padding: '8px 12px', border: '1px solid var(--border-subtle)', borderRadius: '8px', background: 'var(--bg-surface)', color: 'var(--text-primary)' }}
+              >
+                <option value="edge">Microsoft Edge</option>
+                <option value="chrome">Google Chrome</option>
+                <option value="firefox">Firefox</option>
+              </select>
+              <button type="button" className="btn-action" disabled={captureActive || captureLoading || isSubmitting} onClick={() => handleCapture('existing')}>
+                读取浏览器 Cookie
+              </button>
+              <button type="button" className="btn-action btn-action-primary" disabled={captureActive || captureLoading || isSubmitting || browserChoice === 'firefox'} onClick={() => handleCapture('login')}>
+                登录后自动获取
+              </button>
+              {captureActive && <button type="button" className="btn-action" disabled={capture.state === 'saving'} onClick={handleCancelCapture}>取消</button>}
+            </div>
+            {capture.message && <div role="status" aria-live="polite" className="settings-desc" style={{ color: capture.state === 'error' ? 'var(--status-error-text)' : undefined }}>{capture.message}</div>}
+            <div className="settings-desc">
+              登录窗口首次需要扫码或手机登录，之后会记住登录状态；获取成功即自动保存。也可以在下方手动粘贴 Cookie。
             </div>
 
             <div className="settings-input-group" style={{ position: 'relative' }}>
@@ -233,7 +309,7 @@ export const SettingsView: React.FC = () => {
             type="button"
             className="btn-action"
             onClick={handleReset}
-            disabled={settingsLoading || isSubmitting}
+            disabled={settingsLoading || isSubmitting || captureActive || captureLoading}
           >
             <RotateCcw size={14} />
             <span>重置</span>
@@ -242,7 +318,7 @@ export const SettingsView: React.FC = () => {
           <button
             type="submit"
             className="btn-action btn-action-primary"
-            disabled={settingsLoading || isSubmitting}
+            disabled={settingsLoading || isSubmitting || captureActive || captureLoading}
           >
             <Save size={14} />
             <span>{isSubmitting ? '保存中...' : '保存设置'}</span>

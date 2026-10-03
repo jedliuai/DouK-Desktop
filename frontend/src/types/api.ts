@@ -19,6 +19,13 @@ export interface SettingsUpdatePayload {
   original_quality?: boolean;
 }
 
+export interface BrowserCookieStatus {
+  state: 'idle' | 'starting' | 'waiting' | 'saving' | 'success' | 'error' | 'cancelled';
+  message: string;
+  browser?: string;
+  cookie_count?: number;
+}
+
 export interface Media {
   id: string;
   platform: 'douyin' | 'tiktok';

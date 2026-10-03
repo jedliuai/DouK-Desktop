@@ -2,6 +2,7 @@ import os
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
@@ -28,6 +29,11 @@ class SettingsInput(BaseModel):
     download_dir: str | None = None
     cookie: str | None = Field(default=None, max_length=20000)
     original_quality: bool | None = None
+
+
+class BrowserCookieInput(BaseModel):
+    browser: Literal['edge', 'chrome', 'firefox'] = 'edge'
+    mode: Literal['existing', 'login'] = 'existing'
 
 
 def create_app(runtime: Path | None = None, service: DesktopService | None = None):
@@ -91,6 +97,18 @@ def create_app(runtime: Path | None = None, service: DesktopService | None = Non
     @app.post("/api/preview")
     def preview(values: TextInput):
         return {"items": get_service().preview(values.text)}
+
+    @app.post('/api/cookie/browser')
+    def start_browser_cookie(values: BrowserCookieInput):
+        return get_service().start_browser_cookie(values.browser, values.mode)
+
+    @app.get('/api/cookie/browser')
+    def browser_cookie_status():
+        return get_service().browser_cookie.status()
+
+    @app.post('/api/cookie/browser/cancel')
+    def cancel_browser_cookie():
+        return get_service().browser_cookie.cancel()
 
     @app.post("/api/jobs")
     def jobs_add(values: JobsInput):
