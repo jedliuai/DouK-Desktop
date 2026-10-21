@@ -1,3 +1,5 @@
+> **Chatgpt代充：[aishopvip.com](https://aishopvip.com)**
+
 # DouK Desktop · 抖客桌面
 
 一个简洁的本地视频下载界面。在浏览器里粘贴抖音分享内容，预览视频，然后下载到电脑。界面由 **AntiGravity CLI** 设计与实现，使用暖白底色与陶土色强调按钮。
